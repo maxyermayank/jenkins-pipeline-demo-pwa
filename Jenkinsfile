@@ -60,53 +60,25 @@ pipeline {
         }
         stage('Build') {
             steps {
-                echo 'Run coverage and CLEAN UP Before please'
-//                sh './sbt -Dsbt.global.base=.sbt -Dsbt.ivy.home=/home/jenkins/.ivy2 -Divy.home=/home/jenkins/.ivy2 compile coverage test coverageReport coverageOff dist'
-                sh '/usr/local/bin/opt/bin/sbtGitActivator; /usr/local/bin/opt/play-2.5.10/bin/activator -Dsbt.global.base=.sbt -Dsbt.ivy.home=/home/jenkins/.ivy2 -Divy.home=/home/jenkins/.ivy2 compile coverage test coverageReport coverageOff dist'
+                sh 'npm install'
+                sh 'ng lint'
+                sh 'ng build --prod'
             }
         }
-        stage('Publish Reports') {
-            steps {
-                 echo 'Publish Junit Report'
-                 junit allowEmptyResults: true, testResults: 'target/test-reports/*.xml'
-
-                step([$class: 'FindBugsPublisher', canComputeNew: false, defaultEncoding: '', excludePattern: '', healthy: '', includePattern: '', pattern: 'target/scala-2.11/findbugs/report.xml', unHealthy: ''])
-
-                 echo 'Publish Junit HTML Report'
-                 publishHTML target: [
-                     allowMissing: true,
-                     alwaysLinkToLastBuild: false,
-                     keepAll: true,
-                     reportDir: 'target/reports/html',
-                     reportFiles: 'index.html',
-                     reportName: 'Test Suite HTML Report'
-                 ]
-
-                 echo 'Publish Coverage HTML Report'
-                 publishHTML target: [
-                     allowMissing: true,
-                     alwaysLinkToLastBuild: false,
-                     keepAll: true,
-                     reportDir: 'target/scala-2.11/scoverage-report',
-                     reportFiles: 'index.html',
-                     reportName: 'Code Coverage'
-                 ]
-
-                whitesource jobApiToken: '', jobCheckPolicies: 'global', jobForceUpdate: 'global', libExcludes: '', libIncludes: '', product: "${env.WS_PRODUCT_TOKEN}", productVersion: '', projectToken: "${env.WS_PROJECT_TOKEN}", requesterEmail: ''
+        stage('Static Code Coverage Analysis') {
+            parallel {
+              stage('Execute Whitesource Analysis') {
+                  steps {
+                      whitesource jobApiToken: '', jobCheckPolicies: 'global', jobForceUpdate: 'global', libExcludes: '', libIncludes: '', product: "$WS_PRODUCT_TOKEN", productVersion: '', projectToken: "$WS_PROJECT_TOKEN", requesterEmail: ''
+                  }
+              }
+              stage('SonarQube analysis') {
+                  steps {
+                      sh "/usr/bin/sonar-scanner"
+                  }
+              }
             }
         }
-        stage('SonarQube analysis') {
-            steps {
-                sh "/usr/bin/sonar-scanner"
-            }
-        }
-        stage('ArchiveArtifact') {
-            steps {
-                echo 'Archive Artifact'
-                archiveArtifacts '**/target/universal/*.zip'
-            }
-        }
-
          stage('Docker Tag & Push') {
              steps {
                  script {
